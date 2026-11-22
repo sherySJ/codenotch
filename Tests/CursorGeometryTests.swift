@@ -235,9 +235,10 @@ final class CursorGeometryTests: XCTestCase {
     // The band around the folded pill reaches past it into other windows, so
     // passing through it on the way to a button there must not open the notch
     // on top of that button. Resting in it still does.
-    private func foldedController() throws -> (NotchWindowController, CursorGeometry) {
+    private func foldedController(scale: CGFloat? = nil) throws -> (NotchWindowController, CursorGeometry) {
         let controller = NotchWindowController()
         controller.model.snapshots = model().snapshots
+        if let scale { controller.model.requestedScale = scale }
         controller.foldsForFullScreen = false
         controller.show()
         let frame = try XCTUnwrap(controller.panelFrameForTesting)
@@ -246,11 +247,41 @@ final class CursorGeometryTests: XCTestCase {
     }
 
     private func bandPoint(_ g: CursorGeometry, _ m: NotchViewModel) -> CGPoint {
+        // Beside the pill, along the edge: level with its middle across, and
+        // halfway between its end and the end of the wake region.
+        let vertical = g.placement.edge.isVertical
+        let pillEnd = vertical ? g.restingRect.maxY : g.restingRect.maxX
+        let wakeEnd = vertical ? g.pillRect.maxY : g.pillRect.maxX
+        let along = (pillEnd + wakeEnd) / 2
+        let across = vertical ? g.restingRect.midX : g.restingRect.midY
+        return vertical ? CGPoint(x: across, y: along) : CGPoint(x: along, y: across)
+    }
+
+    private func frontPoint(_ g: CursorGeometry, _ m: NotchViewModel) -> CGPoint {
         // On the pill's middle, halfway between its far side and the far side
-        // of the wake region: in the band, off the pill.
+        // of the wake region: in front of it, where buttons against the edge sit.
         let along = g.placement.along(of: CGPoint(x: g.restingRect.midX, y: g.restingRect.midY))
         let pillDepth = m.restingDepth * m.sizeScale + m.edgeGap
         return g.placement.point(along: along, across: (pillDepth + m.wakeDepth) / 2)
+    }
+
+    // A side pane's close button sits against the edge, right in front of the
+    // pill. Aiming at it means resting on it, so in front the band never opens
+    // the notch, however long the pointer stays.
+    func testRestingInFrontOfTheFoldedPillNeverOpensIt() throws {
+        let (controller, g) = try foldedController()
+        defer { controller.stop() }
+        var now = Date(timeIntervalSinceReferenceDate: 0)
+        controller.bandClock = { now }
+        let point = frontPoint(g, controller.model)
+        XCTAssertTrue(g.pillRect.contains(point))
+        XCTAssertFalse(g.restingRect.contains(point))
+        XCTAssertFalse(g.isBesidePill(point))
+
+        controller.cursorMoved(at: point)
+        now += NotchWindowController.bandDwell * 10
+        controller.cursorMoved(at: point)
+        XCTAssertFalse(controller.model.isExpanded, "resting in front of the pill opened the notch over the button there")
     }
 
     func testFoldedPillOpensOnContact() throws {
@@ -261,13 +292,14 @@ final class CursorGeometryTests: XCTestCase {
     }
 
     func testBandAroundFoldedPillOpensOnlyAfterTheDwell() throws {
-        let (controller, g) = try foldedController()
+        let (controller, g) = try foldedController(scale: 0.5)
         defer { controller.stop() }
         var now = Date(timeIntervalSinceReferenceDate: 0)
         controller.bandClock = { now }
         let point = bandPoint(g, controller.model)
         XCTAssertTrue(g.pillRect.contains(point))
         XCTAssertFalse(g.restingRect.contains(point))
+        XCTAssertTrue(g.isBesidePill(point))
 
         controller.cursorMoved(at: point)
         XCTAssertFalse(controller.model.isExpanded, "passing through the band opened the notch")
@@ -280,7 +312,7 @@ final class CursorGeometryTests: XCTestCase {
     }
 
     func testLeavingTheBandStartsTheDwellOver() throws {
-        let (controller, g) = try foldedController()
+        let (controller, g) = try foldedController(scale: 0.5)
         defer { controller.stop() }
         var now = Date(timeIntervalSinceReferenceDate: 0)
         controller.bandClock = { now }
@@ -293,7 +325,7 @@ final class CursorGeometryTests: XCTestCase {
     }
 
     func testClickInTheBandKeepsTheNotchFoldedUntilThePointerLeaves() throws {
-        let (controller, g) = try foldedController()
+        let (controller, g) = try foldedController(scale: 0.5)
         defer { controller.stop() }
         var now = Date(timeIntervalSinceReferenceDate: 0)
         controller.bandClock = { now }
@@ -312,7 +344,7 @@ final class CursorGeometryTests: XCTestCase {
     }
 
     func testDraggingIntoTheBandKeepsTheNotchFolded() throws {
-        let (controller, g) = try foldedController()
+        let (controller, g) = try foldedController(scale: 0.5)
         defer { controller.stop() }
         var now = Date(timeIntervalSinceReferenceDate: 0)
         controller.bandClock = { now }

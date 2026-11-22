@@ -89,6 +89,18 @@ final class CursorGeometry {
         )
     }()
 
+    /// Whether a point in the band sits beside the folded pill, along the
+    /// edge, rather than in front of it, toward the middle of the screen.
+    /// Only the sides can open the notch by resting there: buttons that sit
+    /// against the edge (a window's or a side pane's close button) are in
+    /// front of the pill, and aiming at one means resting on it.
+    func isBesidePill(_ point: CGPoint) -> Bool {
+        let pill = restingRect
+        return placement.edge.isVertical
+            ? point.x >= pill.minX && point.x <= pill.maxX
+            : point.y >= pill.minY && point.y <= pill.maxY
+    }
+
     private lazy var orbHandleRect = handleRect(points: orbHandlePoints)
     private lazy var gripRect = handleRect(points: [gripPoint])
 

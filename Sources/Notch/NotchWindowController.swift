@@ -1476,8 +1476,12 @@ final class NotchWindowController {
         // restoring it — the notch ends up folding on every poll.
         let inWake = geometry.liveRect(gripRevealed: gripRevealed).contains(local)
         let onPill = model.isExpanded || geometry.restingRect.contains(local)
-        if !inWake || onPill { resetBand() }
-        let wakes = inWake && (onPill || bandDwellElapsed())
+        // In front of the pill the band never opens it, however long the
+        // pointer rests: that is where buttons against the edge sit.
+        let beside = inWake && !onPill && geometry.isBesidePill(local)
+        if !beside { resetBand() }
+        print("DBG local=\(local) inWake=\(inWake) onPill=\(onPill) beside=\(beside) pill=\(geometry.pillRect) rest=\(geometry.restingRect)")
+        let wakes = inWake && (onPill || (beside && bandDwellElapsed()))
         let overCell = wasExpanded && geometry.cellIndex(at: local) != nil
         setExpanded(wakes || overTooltip || overCell,
                     ignoreAlwaysOn: shouldFoldForActiveAppOrWindow)
